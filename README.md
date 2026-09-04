@@ -23,6 +23,8 @@ docker compose up -d
 http://<服务器地址>:2053
 ```
 
+Compose 使用宿主机网络模式（`network_mode: host`）。因此容器不会进行端口映射，面板和 Xray 入站会直接监听宿主机端口。需要在 3x-ui 面板中配置的每个入站端口都必须确保未被宿主机其他程序占用，并在云服务器安全组及防火墙中放行。
+
 如果 `x-ui` package 尚未设置为公开，先登录 GitHub Container Registry：
 
 ```bash
@@ -47,23 +49,27 @@ mkdir -p db cert acme
 
 ## 配置说明
 
-当前 Compose 配置默认使用 SQLite，并映射以下端口：
+当前 Compose 配置默认使用 SQLite，面板直接监听宿主机的以下端口：
 
 ```text
-2053:2053
+2053
 ```
 
-镜像默认启用 Fail2ban，因此 Compose 为容器添加了 `NET_ADMIN` 和 `NET_RAW` capability。若不需要 Fail2ban，可在 `docker-compose.yml` 中将 `XUI_ENABLE_FAIL2BAN` 设置为 `"false"`，并按需移除对应 capability。
+镜像默认启用 Fail2ban，因此 Compose 为容器添加了 `NET_ADMIN` 和 `NET_RAW` capability。由于容器使用宿主机网络模式，Fail2ban 可能直接修改宿主机的 iptables 规则。若不需要 Fail2ban，可在 `docker-compose.yml` 中将 `XUI_ENABLE_FAIL2BAN` 设置为 `"false"`，并按需移除对应 capability。
+
+`network_mode: host` 主要适用于 Linux Docker 主机。在 Docker Desktop（Windows/macOS）上，宿主机网络模式的行为与原生 Linux 不同，不建议依赖该模式暴露服务。
 
 PostgreSQL 服务默认以注释形式保留在 `docker-compose.yml` 中，不会被加载或启动。如需使用 PostgreSQL，请同时取消以下内容的注释：
 
 - `x-ui` 服务中的 `XUI_DB_TYPE` 和 `XUI_DB_DSN`；
 - 文件末尾的 `postgres` 服务。
 
+由于 `x-ui` 使用宿主机网络模式，预留的 PostgreSQL 服务也配置为使用宿主机网络，连接地址应使用 `127.0.0.1:5432`，而不是 Compose 服务名 `postgres`。该服务预留配置为只监听 `127.0.0.1`，不会直接暴露到宿主机的外部网卡。启用前请确认宿主机的 `5432` 端口未被占用。
+
 然后执行：
 
 ```bash
-docker compose up -d
+docker compose --profile postgres up -d
 ```
 
 ## 镜像标签

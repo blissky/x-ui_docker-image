@@ -6,7 +6,7 @@
 ghcr.io/blissky/x-ui
 ```
 
-镜像由 GitHub Actions 使用上游 `3x-ui` 仓库 `main` 分支中的 Dockerfile 直接构建，不在本仓库复制上游源码。推送到 `main`、推送 Git tag 或手动运行 workflow 时会触发构建，并生成 `latest`、Git tag 和 commit SHA 标签。
+镜像由 GitHub Actions 使用上游 `3x-ui` 仓库正式 Release 对应 tag 中的 Dockerfile 直接构建，不在本仓库复制上游源码。推送到本仓库 `main`、推送 Git tag、定时检查或手动运行 workflow 时会检查上游最新正式版；只有对应版本镜像尚未发布时才会执行构建。
 
 ## 快速部署
 
@@ -68,11 +68,11 @@ docker compose up -d
 
 ## 镜像标签
 
-- `latest`：推送到 `main` 分支时生成；
-- Git tag：推送版本标签时生成，例如 `v2.8.4`；
-- commit SHA：每次构建都会生成，用于固定到不可变版本。
+- `latest`：指向最新上游正式版；
+- 上游版本 tag：例如 `v3.7.0`；
+- 不带 `v` 的版本号：例如 `3.7.0`。
 
-生产环境建议使用具体版本标签或 commit SHA，而不是长期依赖 `latest`。
+workflow 每 6 小时检查一次上游 `releases/latest`。生产环境建议使用具体版本标签，例如 `v3.7.0`，而不是长期依赖 `latest`。
 
 ## 上游项目与许可证
 

@@ -6,16 +6,22 @@ on:
       - main
     tags:
       - '*'
+  schedule:
+    - cron: '23 */6 * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: publish-x-ui
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ghcr.io/blissky/x-ui
-  UPSTREAM_CONTEXT: https://github.com/MHSanaei/3x-ui.git#main
+  UPSTREAM_REPOSITORY: MHSanaei/3x-ui
 
 jobs:
   publish:
@@ -36,20 +42,47 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Check latest upstream release
+        id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="$(gh api "repos/${UPSTREAM_REPOSITORY}/releases/latest" --jq '.tag_name')"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Unsupported upstream release tag: $tag" >&2
+            exit 1
+          fi
+
+          version="${tag#v}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          if docker buildx imagetools inspect "${IMAGE_NAME}:${tag}" >/dev/null 2>&1; then
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "${IMAGE_NAME}:${tag} already exists; skipping build."
+          else
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            echo "${IMAGE_NAME}:${tag} does not exist; building release ${tag}."
+          fi
+
       - name: Extract image metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=ref,event=tag
-            type=sha
+            type=raw,value=${{ steps.upstream.outputs.tag }}
+            type=raw,value=${{ steps.upstream.outputs.version }}
+            type=raw,value=latest
 
       - name: Build and push image
+        if: steps.upstream.outputs.should_build == 'true'
         uses: docker/build-push-action@v6
         with:
-          context: ${{ env.UPSTREAM_CONTEXT }}
+          context: https://github.com/${{ env.UPSTREAM_REPOSITORY }}.git#${{ steps.upstream.outputs.tag }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
